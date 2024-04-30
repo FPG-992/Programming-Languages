@@ -2,6 +2,9 @@
 #include <fstream>
 #include <cmath>
 
+//this problem is very similar to the subset sum problem but with a few differences
+//we will use dp to find the absolute difference of of S' and S
+
 using namespace std;
 
 #define MAX_SIZE 1000000
@@ -25,11 +28,7 @@ for (int i=0; i<N; i++){
     file>>numbers[i];
 }
 
-//wrea mexri edw exume diavasei ta dedomena apo to arxeio
-
-for (int i=0; i<N; i++){
-    cout << numbers[i] << " ";
-}
+//we've read the file till here. Now we will start the dp process
 
 
 
