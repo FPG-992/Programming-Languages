@@ -41,7 +41,7 @@ void inorder(treenode* root){
     inorder(root->right);
 }
 
-void optimize(treenode* root){
+void optimize(treenode* root, int& key){
     if (root==nullptr){
         return;
     }
