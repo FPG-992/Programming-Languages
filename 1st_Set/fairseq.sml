@@ -1,21 +1,22 @@
-(* Input parse code by Stavros Aronis, modified by Nick Korasidis. *)
-fun parse file =
-    let
-	(* A function to read an integer from specified input. *)
-        fun readInt input = 
-	    Option.valOf (TextIO.scanStream (Int.scan StringCvt.DEC) input)
-
-	(* Open input file. *)
-    	val inStream = TextIO.openIn file
-
-        (* Read an integer (number of countries) and consume newline. *)
-	val n = readInt inStream
-	val _ = TextIO.inputLine inStream
-
-        (* A function to read N integers from the open file. *)
-	fun readInts 0 acc = acc (* Replace with 'rev acc' for proper order. *)
-	  | readInts i acc = readInts (i - 1) (readInt inStream :: acc)
-    in
-   	(n, readInts n [])
-    end
-
+fun fairseq filename =
+	let 
+		val ins = TextIO.openIn filename (*open the file*)
+		val _ = TextIO.inputLine ins (*population not needed*)
+		val line = TextIO.inputLine ins (*read the line*)				
+		val _ = TextIO.closeIn ins (*close the file*)
+		val numberslist = case line of
+			NONE => []
+			| SOME s => List.mapPartial Int.fromString (String.tokens (fn c => c = #" ") s) (*split the line into a list of integers*)
+		val total_sum = foldl (op +) 0 numberslist (*sum the list of integers into total_sum*)
+		fun find_min_diff (_, min_diff) [] = min_diff
+		  | find_min_diff(current_sum,min_diff) (x::xs) =
+			let 
+				val new_sum = current_sum + x
+				val new_diff = abs(total_sum - 2*new_sum)
+			in
+				find_min_diff(new_sum, Int.min(min_diff, new_diff)) xs
+			end
+		val result = find_min_diff(0, total_sum) numberslist
+		in
+			print (Int.toString result ^ "\n")
+		end
