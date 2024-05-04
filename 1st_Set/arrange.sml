@@ -8,19 +8,46 @@ fun arrange filename =
             val _ = TextIO.closeIn ins (*close the file*)
             val treelist = case line of
                 NONE => []
-                | SOME s => List.mapPartial Int.fromString (String.tokens (fn c => c = #" ") s) (*split the line into a list of integers*)
+                | SOME s => map (fn x => valOf (Int.fromString x)) (String.tokens (fn c => c = #" ") s)
             (*done until now: read file, created int list *)
             
-            fun create_tree treelist =
-                case treelist of 
-                    0::rest => (empty,rest)
-                    | n::rest => let 
-                        val (left,rest1) = create_tree rest
-                        val (right,rest2) = create_tree rest1
-                    in 
-                        (node(n,left,right),rest2)
+            fun create_tree [] = (empty, [])
+            | create_tree (0::rest) = (empty, rest)
+            | create_tree (n::rest) =
+                    let
+                        val (left, xsAfterLeft) = create_tree rest
+                        val (right, xsAfterRight) = create_tree xsAfterLeft
+                    in
+                        (node(n, left, right), xsAfterRight)
                     end
+
             
+            fun lexsmallest empty = empty
+            | lexsmallest (node(n, left, right)) =
+                    let
+                        val newleft = lexsmallest left
+                        val newright = lexsmallest right
+
+                        fun extract_int empty = NONE
+                        | extract_int (node(n, _, _)) = SOME n
+
+                        val left_val = extract_int newleft
+                        val right_val = extract_int newright
+
+                        val swapped = 
+                            (case (left_val, right_val) of
+                                (NONE, NONE) => false
+                            | (NONE, SOME _) => false
+                            | (SOME _, NONE) => true
+                            | (SOME l, SOME r) => l > r)
+                    in
+                        if swapped then
+                            node(n, newright, newleft)
+                        else
+                            node(n, newleft, newright)
+                    end
+
+
             fun print_tree empty = ()
                 | print_tree (node(n,left,right)) = (
                     print_tree left;
@@ -28,5 +55,9 @@ fun arrange filename =
                     print_tree right
                 )
 
+            val (tree,_) = create_tree treelist
+            val lexsmallesttree = lexsmallest tree
             
-    
+            in
+            print_tree lexsmallesttree
+            end
