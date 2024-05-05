@@ -1,0 +1,15 @@
+expected outputs:
+
+Testcase: tree0
+1 6 4 2 3 5
+
+Testcase: tree1
+1 7 5 11 4 12 2 3 8 6 9 10
+
+Testcase: tree2
+1 2 3
+
+Testcase: tree9
+1 2 5 3 4 6
+
+
