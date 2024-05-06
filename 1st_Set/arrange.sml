@@ -53,16 +53,16 @@ fun arrange filename =
         end
 
 
-            (* Print the in-order traversal of the tree *)
-            fun print_tree empty = ()
-            | print_tree (node(n,left,right)) = (
-                    print_tree left;
-                    print (Int.toString n ^ " ");
-                    print_tree right
-                )
+    (* Print the in-order traversal of the tree *)
+    fun print_tree empty = ()
+    | print_tree (node(n,left,right)) = (
+            print_tree left;
+            print (Int.toString n ^ " ");
+            print_tree right
+        )
 
-            val (tree, _) = create_tree treelist
-            val (arranged_tree, _) = smallest_lex_tree tree
-        in
-            print_tree arranged_tree
-        end
+        val (tree, _) = create_tree treelist
+        val (arranged_tree, _) = smallest_lex_tree tree
+    in
+        print_tree arranged_tree
+    end
