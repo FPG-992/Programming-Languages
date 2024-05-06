@@ -21,36 +21,48 @@ fun arrange filename =
                     (node(n, left, right), xsAfterRight)
                 end
 
-(* Arranging the tree in order to get the smallest value lexicographically tree in in order form *)
-fun arrange_tree empty = (empty, NONE)
-  | arrange_tree (node(v, left_subtree, right_subtree)) =
+    (* Arranging the tree in order to get the smallest value lexicographically tree in in order form *)
+
+    fun smallest_lex_tree tree =
         let
-            val (arranged_left, left_min) = arrange_tree left_subtree
-            val (arranged_right, right_min) = arrange_tree right_subtree
-
-            fun swap () = (node(v, arranged_right, arranged_left), right_min)
-            fun retain () = (node(v, arranged_left, arranged_right), left_min)
-
-            val result =
+            (* Nested helper functions *)
+            fun process_children (v, arranged_left, left_min, arranged_right, right_min) =
                 case (left_min, right_min) of
                     (NONE, NONE) => (node(v, arranged_left, arranged_right), SOME v)
-                  | (NONE, SOME rm) => if rm < v then swap () else retain ()
-                  | (SOME lm, NONE) => if lm < v then retain () else swap ()
-                  | (SOME lm, SOME rm) => if rm < lm then swap () else retain ()
+                | (NONE, SOME rm) =>
+                        if rm < v then (node(v, arranged_right, arranged_left), right_min)
+                        else (node(v, arranged_left, arranged_right), left_min)
+                | (SOME lm, NONE) =>
+                        if lm < v then (node(v, arranged_left, arranged_right), left_min)
+                        else (node(v, arranged_right, arranged_left), right_min)
+                | (SOME lm, SOME rm) =>
+                        if rm < lm then (node(v, arranged_right, arranged_left), right_min)
+                        else (node(v, arranged_left, arranged_right), left_min)
+
+            (* what this function does is that it takes a tree and returns the smallest lexicographically tree *)
+            fun helper empty = (empty, NONE)
+            | helper (node(v, left_subtree, right_subtree)) =
+                    let
+                        val (arranged_left, left_min) = helper left_subtree
+                        val (arranged_right, right_min) = helper right_subtree
+                    in
+                        process_children(v, arranged_left, left_min, arranged_right, right_min)
+                    end
         in
-            result
+            helper tree
         end
 
-        (* Print the in-order traversal of the tree *)
-        fun print_tree empty = ()
-          | print_tree (node(n,left,right)) = (
-                print_tree left;
-                print (Int.toString n ^ " ");
-                print_tree right
-            )
 
-        val (tree, _) = create_tree treelist
-        val (arranged_tree, _) = arrange_tree tree
-    in
-        print_tree arranged_tree
-    end
+            (* Print the in-order traversal of the tree *)
+            fun print_tree empty = ()
+            | print_tree (node(n,left,right)) = (
+                    print_tree left;
+                    print (Int.toString n ^ " ");
+                    print_tree right
+                )
+
+            val (tree, _) = create_tree treelist
+            val (arranged_tree, _) = smallest_lex_tree tree
+        in
+            print_tree arranged_tree
+        end
