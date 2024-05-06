@@ -3,14 +3,14 @@ datatype tree = empty | node of int * tree * tree
 fun arrange filename =
     let 
         val ins = TextIO.openIn filename
-        val _ = TextIO.inputLine ins
+        val _ = TextIO.inputLine ins (* Ignore the first line population n is not needed*)
         val line = TextIO.inputLine ins
         val _ = TextIO.closeIn ins
         val treelist = case line of
-            NONE => []
-            | SOME s => map (fn x => valOf (Int.fromString x)) (String.tokens (fn c => c = #" ") s)
+            NONE => [] (* If the line is empty, return an empty list *)
+            | SOME s => map (fn x => valOf (Int.fromString x)) (String.tokens (fn c => c = #" ") s) (* Parse the line into a list of integers *)
 
-        (* Creating the tree from the list *)
+        (* Creating the tree from the list | Given the tree in a preorder list *) 
         fun create_tree [] = (empty, [])
           | create_tree (0::rest) = (empty, rest)
           | create_tree (n::rest) =
@@ -21,25 +21,25 @@ fun arrange filename =
                     (node(n, left, right), xsAfterRight)
                 end
 
-        (* Function arrange_tree *)
-        fun arrange_tree (empty) = (empty, NONE)
-          | arrange_tree (node(x, left, right)) =
-                let
-                    val (l', minl) = arrange_tree left
-                    val (r', minr) = arrange_tree right
-                in  
-                    case (minl, minr) of
-                        (NONE, NONE) => (node (x, l', r'), SOME x)
-                      | (NONE, SOME minr) =>
-                            if minr < x then (node (x, r', l'), SOME minr)
-                            else (node (x, l', r'), SOME x)
-                      | (SOME minl, NONE) =>
-                            if minl < x then (node (x, l', r'), SOME minl)
-                            else (node (x, r', l'), SOME x)
-                      | (SOME minl, SOME minr) =>
-                          if minr < minl then (node (x, r', l'), SOME minr)
-                          else (node (x, l', r'), SOME minl)
-                end
+(* Arranging the tree in order to get the smallest value lexicographically tree in in order form *)
+fun arrange_tree empty = (empty, NONE)
+  | arrange_tree (node(v, left_subtree, right_subtree)) =
+        let
+            val (arranged_left, left_min) = arrange_tree left_subtree
+            val (arranged_right, right_min) = arrange_tree right_subtree
+
+            fun swap () = (node(v, arranged_right, arranged_left), right_min)
+            fun retain () = (node(v, arranged_left, arranged_right), left_min)
+
+            val result =
+                case (left_min, right_min) of
+                    (NONE, NONE) => (node(v, arranged_left, arranged_right), SOME v)
+                  | (NONE, SOME rm) => if rm < v then swap () else retain ()
+                  | (SOME lm, NONE) => if lm < v then retain () else swap ()
+                  | (SOME lm, SOME rm) => if rm < lm then swap () else retain ()
+        in
+            result
+        end
 
         (* Print the in-order traversal of the tree *)
         fun print_tree empty = ()
@@ -49,7 +49,7 @@ fun arrange filename =
                 print_tree right
             )
 
-        val (tree,_) = create_tree treelist
+        val (tree, _) = create_tree treelist
         val (arranged_tree, _) = arrange_tree tree
     in
         print_tree arranged_tree

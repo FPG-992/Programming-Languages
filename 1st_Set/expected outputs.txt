@@ -12,14 +12,8 @@ Testcase: tree2
 Testcase: tree9
 1 2 5 3 4 6
 
+arrange("tree0.txt");
+arrange("tree1.txt");
+arrange("tree2.txt");
+arrange("tree9.txt");
 
-
-i want an algorithm like that:
-
-find at the lowest level the smallest value, make the subtree with the smallest value at the deepest level the left subtree of the tree.
-
-check in the trees if the smallest value is on the left, if not we swap them.
-
-the swaps should only be in the children of the nodes, we cannot swap nodes themselves. 
-
-i want this in ML
