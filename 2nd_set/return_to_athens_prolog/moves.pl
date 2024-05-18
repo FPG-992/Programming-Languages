@@ -15,14 +15,14 @@ read_grid(Stream, N, [Row|Grid]) :-
     N1 is N - 1,
     read_grid(Stream, N1, Grid).
 
-move(dx(-1), dy(0), W).   % W
-move(dx(1), dy(0), E).    % E
-move(dx(0), dy(-1), N).   % N
-move(dx(0), dy(1), S).    % S
-move(dx(-1), dy(-1), NW). % NW
-move(dx(-1), dy(1), SW).  % SW
-move(dx(1), dy(-1), NE).  % NE
-move(dx(1), dy(1), SE).   % SE
+move(dx(-1), dy(0), w).   % W
+move(dx(1), dy(0), e).    % E
+move(dx(0), dy(-1), n).   % N
+move(dx(0), dy(1), s).    % S
+move(dx(-1), dy(-1), nw). % NW
+move(dx(-1), dy(1), sw).  % SW
+move(dx(1), dy(-1), ne).  % NE
+move(dx(1), dy(1), se).   % SE
 
 within_bounds(N, X, Y) :-
     X >= 0, X < N,
