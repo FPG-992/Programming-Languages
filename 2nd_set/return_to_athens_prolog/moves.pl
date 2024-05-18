@@ -1,4 +1,3 @@
-% Load the input file and parse the grid
 load_grid(FileName, Grid) :-
     open(FileName, read, Stream),
     read_line_to_codes(Stream, Line1),
@@ -16,7 +15,6 @@ read_grid(Stream, N, [Row|Grid]) :-
     N1 is N - 1,
     read_grid(Stream, N1, Grid).
 
-% Define valid moves
 move(dx(-1), dy(0), w).   % W
 move(dx(1), dy(0), e).    % E
 move(dx(0), dy(-1), n).   % N
@@ -26,12 +24,10 @@ move(dx(-1), dy(1), sw).  % SW
 move(dx(1), dy(-1), ne).  % NE
 move(dx(1), dy(1), se).   % SE
 
-% Check if the move is within bounds
 within_bounds(N, X, Y) :-
     X >= 0, X < N,
     Y >= 0, Y < N.
 
-% Find path using BFS
 bfs(Grid, N, Path) :-
     bfs([[0, 0, []]], Grid, N, [(0, 0)], Path).
 
@@ -51,16 +47,14 @@ bfs([[X, Y, Moves]|Queue], Grid, N, Visited, Path) :-
     append(Visited, [[X, Y]], NewVisited),
     bfs(NewQueue, Grid, N, NewVisited, Path).
 
-% Check if the current position is the target
 target(X, Y, N) :-
     X is N - 1,
     Y is N - 1.
 
-% Main predicate to find the moves
 moves(FileName, Moves) :-
     load_grid(FileName, Grid),
     length(Grid, N),
     (   bfs(Grid, N, Path)
     ->  reverse(Path, Moves)
-    ;   Moves = []
+    ;   fail
     ).
