@@ -25,5 +25,5 @@ def fairseq(filename):
     result = abs(total_sum - 2 * closest_sum)
     print(result)
 
-    if __name__ == '__main__':
-        fairseq(sys.argv[1])
+if __name__ == '__main__':
+    fairseq(sys.argv[1])
