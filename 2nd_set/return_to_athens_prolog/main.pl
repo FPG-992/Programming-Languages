@@ -17,38 +17,39 @@ read_grid(Stream, N, [Row|Grid]) :-
     read_grid(Stream, N1, Grid).
 
 % Define valid moves
-move(dx(-1), dy(0)).   % W
-move(dx(1), dy(0)).    % E
-move(dx(0), dy(-1)).   % N
-move(dx(0), dy(1)).    % S
-move(dx(-1), dy(-1)).  % NW
-move(dx(-1), dy(1)).   % SW
-move(dx(1), dy(-1)).   % NE
-move(dx(1), dy(1)).    % SE
+move(dx(-1), dy(0), w).   % W
+move(dx(1), dy(0), e).    % E
+move(dx(0), dy(-1), n).   % N
+move(dx(0), dy(1), s).    % S
+move(dx(-1), dy(-1), nw). % NW
+move(dx(-1), dy(1), sw).  % SW
+move(dx(1), dy(-1), ne).  % NE
+move(dx(1), dy(1), se).   % SE
 
 % Check if the move is within bounds
 within_bounds(N, X, Y) :-
     X >= 0, X < N,
     Y >= 0, Y < N.
 
-% Find path from the current position to the target
-find_path(Grid, X, Y, N, Path, Moves) :-
-    length(Grid, N),
-    target(X, Y, N),
-    reverse(Path, Moves).
+% Find path using BFS
+bfs(Grid, N, Path) :-
+    bfs([[0, 0, []]], Grid, N, [(0, 0)], Path).
 
-find_path(Grid, X, Y, N, Path, Moves) :-
-    move(dx(Dx), dy(Dy)),
-    X1 is X + Dx,
-    Y1 is Y + Dy,
-    within_bounds(N, X1, Y1),
-    nth0(Y, Grid, Row),
-    nth0(X, Row, CurrCars),
-    nth0(Y1, Grid, NextRow),
-    nth0(X1, NextRow, NextCars),
-    NextCars < CurrCars,
-    \+ member((X1, Y1), Path),
-    find_path(Grid, X1, Y1, N, [(X1, Y1)|Path], Moves).
+bfs([[X, Y, Moves]|_], _, N, _, Moves) :-
+    target(X, Y, N).
+
+bfs([[X, Y, Moves]|Queue], Grid, N, Visited, Path) :-
+    findall([X1, Y1, [Dir|Moves]],
+            (move(dx(Dx), dy(Dy), Dir),
+             X1 is X + Dx, Y1 is Y + Dy,
+             within_bounds(N, X1, Y1),
+             nth0(Y, Grid, Row), nth0(X, Row, Cars),
+             nth0(Y1, Grid, NextRow), nth0(X1, NextRow, NextCars),
+             NextCars < Cars, \+ member((X1, Y1), Visited)),
+            NextMoves),
+    append(Queue, NextMoves, NewQueue),
+    append(Visited, [[X, Y]], NewVisited),
+    bfs(NewQueue, Grid, N, NewVisited, Path).
 
 % Check if the current position is the target
 target(X, Y, N) :-
@@ -59,7 +60,7 @@ target(X, Y, N) :-
 moves(FileName, Moves) :-
     load_grid(FileName, Grid),
     length(Grid, N),
-    find_path(Grid, 0, 0, N, [(0, 0)], Moves), !.
-
-% Handle the case where no path is found
-moves(_, []).
+    (   bfs(Grid, N, Path)
+    ->  reverse(Path, Moves)
+    ;   Moves = []
+    ).
