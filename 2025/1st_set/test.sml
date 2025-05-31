@@ -1,139 +1,93 @@
-datatype bop = Plus | Minus | Mult | Or | And | Xor | Eq | Lt | Gt
-datatype typ = Bool | Int | Arrow of typ * typ
+(* Load the definitions from MLin.sml *)
+use "MLin.sml";
 
-datatype expr =
-    IntLit of int
-  | BoolLit of bool
-  | Bop of bop * expr * expr
-  | ITE of expr * expr * expr
-  | LetIn of string * expr * expr
-  | Var of string
-  | Fun of string * typ * expr
-  | App of expr * expr
+type testCase = {
+  name           : string,
+  exp            : expr,
+  expectedType   : typ,
+  expectedValue  : value
+};
 
-type 'a env = (string * 'a) list
+(* Some simple tests. You can extend this list with your own tests. *)
+val tests = [
+  {
+    name          = "Test 1: let z = 42 in if x > 5 then z - 20 else z + 1",
+    exp           =
+      LetIn ("z", IntLit 42,
+        LetIn ("x", IntLit 6,
+          ITE(
+            Bop (Gt, Var "x", IntLit 5),    
+            Bop (Minus, Var "z", IntLit 20),
+            Bop (Plus,  Var "z", IntLit 1)
+          )
+        )
+      ),
+    expectedType  = Int,
+    expectedValue = VInt 22  
+  },
+  {
+    name          = "Test2: let x = 10 in x + 5",
+    exp           =
+      LetIn ("x", IntLit 10,
+        Bop (Plus, Var "x", IntLit 5)
+      ),
+    expectedType  = Int,
+    expectedValue = VInt 15  
+  },
+  {
+    name          = "Test3: let foo = fun x => if x = 0 then 0 else x + 2 in foo 40 - foo 0",
+    exp           =
+      LetIn ("foo",
+        Fun ("x", Int,
+          ITE(
+            Bop (Eq, Var "x", IntLit 0),
+            IntLit 0,
+            Bop (Plus, Var "x", IntLit 2)
+          )
+        ),
+        Bop (Minus,
+          App (Var "foo", IntLit 40),
+          App (Var "foo", IntLit 0)
+        )
+      ),
+    expectedType  = Int,
+    expectedValue = VInt 42
+  },
+  {
+    name          = "Test4: let x = true in let z = if x then 10 else 20 in let bar = fun y => 2*y in bar z",
+    exp           =
+      LetIn ("x", BoolLit true,
+        LetIn ("z",
+          ITE (Var "x", IntLit 10, IntLit 20),
+          LetIn ("bar",
+            Fun ("y", Int, Bop (Mult, IntLit 2, Var "y")),
+            App (Var "bar", Var "z")
+          )
+        )
+      ),
+    expectedType  = Int,
+    expectedValue = VInt 20
+  }
+];
 
-datatype value =
-    VInt of int
-  | VBool of bool
-  | VClo of value env * string * expr
+fun assert (name : string) (condition : bool) =
+  if condition then
+    print (name ^ " -- PASS\n")
+  else
+    print (name ^ " -- FAIL\n");
 
-exception TypeError of string
-exception RunTimeError of string
+(* Run one test: check type, then eval result. *)
+fun runTest (t : testCase) : unit =
+  let 
+    val actualTy  = typeCheck [] (#exp t)
+    val actualVal = eval [] (#exp t) 
+  in
+    assert (#name t ^ " (type)")  (actualTy = #expectedType t);
+    assert (#name t ^ " (value)") (actualVal = #expectedValue t)
+  end
 
-(* ---------------------------------------------------------------- *)
-fun sameType (Int,  Int)  = true
-  | sameType (Bool, Bool) = true
-  | sameType (Arrow(a1,b1), Arrow(a2,b2)) =
-      sameType (a1,a2) andalso sameType (b1,b2)
-  | sameType _            = false
+(* Runs all tests in the batch *)
+fun runAllTests () = List.app runTest tests;
 
-fun lookup _ [] = NONE
-  | lookup x ((y,v)::r) = if x = y then SOME v else lookup x r
-
-fun insert x v e = (x,v)::e
-fun empty () : 'a env = []
-
-(* ----------------------------- typeCheck ------------------------- *)
-fun typeCheck g (IntLit _)  = Int
-  | typeCheck g (BoolLit _) = Bool
-  | typeCheck g (Var x) =
-      (case lookup x g of 
-         SOME t => t 
-       | NONE   => raise TypeError "unbound")
-  | typeCheck g (Bop (op,e1,e2)) =
-      let
-        val t1 = typeCheck g e1
-        val t2 = typeCheck g e2
-      in
-        case op of
-            Plus  => if sameType (t1,Int)  andalso sameType (t2,Int)
-                     then Int  else raise TypeError ""
-          | Minus => if sameType (t1,Int)  andalso sameType (t2,Int)
-                     then Int  else raise TypeError ""
-          | Mult  => if sameType (t1,Int)  andalso sameType (t2,Int)
-                     then Int  else raise TypeError ""
-          | And   => if sameType (t1,Bool) andalso sameType (t2,Bool)
-                     then Bool else raise TypeError ""
-          | Or    => if sameType (t1,Bool) andalso sameType (t2,Bool)
-                     then Bool else raise TypeError ""
-          | Xor   => if sameType (t1,Bool) andalso sameType (t2,Bool)
-                     then Bool else raise TypeError ""
-          | Eq    => if sameType (t1,t2) then Bool else raise TypeError ""
-          | Lt    => if sameType (t1,Int)  andalso sameType (t2,Int)
-                     then Bool else raise TypeError ""
-          | Gt    => if sameType (t1,Int)  andalso sameType (t2,Int)
-                     then Bool else raise TypeError ""
-      end
-  | typeCheck g (ITE (c,t,e)) =
-      (case typeCheck g c of
-          Bool =>
-            let
-              val tt = typeCheck g t
-              val te = typeCheck g e
-            in
-              if sameType (tt,te) then tt
-              else raise TypeError ""
-            end
-        | _ => raise TypeError "")
-  | typeCheck g (LetIn (x,e1,e2)) =
-      let val tx = typeCheck g e1
-      in
-        typeCheck (insert x tx g) e2
-      end
-  | typeCheck g (Fun (x,a,b)) =
-      let val rt = typeCheck (insert x a g) b
-      in
-        Arrow (a, rt)
-      end
-  | typeCheck g (App (f,a)) =
-      (case typeCheck g f of
-          Arrow (pt, rt) =>
-            if sameType (typeCheck g a, pt) then rt
-            else raise TypeError ""
-        | _ => raise TypeError "nonfun")
-
-(* ------------------------------- eval --------------------------- *)
-fun eval r (IntLit n)  = VInt n
-  | eval r (BoolLit b) = VBool b
-  | eval r (Var x) =
-      (case lookup x r of 
-         SOME v => v
-       | NONE   => raise RunTimeError "unbound")
-  | eval r (Bop (op,e1,e2)) =
-      let
-        val v1 = eval r e1
-        val v2 = eval r e2
-      in
-        case (op,v1,v2) of
-            (Plus ,VInt a,VInt b)   => VInt (a + b)
-          | (Minus,VInt a,VInt b)   => VInt (a - b)
-          | (Mult ,VInt a,VInt b)   => VInt (a * b)
-          | (And  ,VBool a,VBool b) => VBool (a andalso b)
-          | (Or   ,VBool a,VBool b) => VBool (a orelse b)
-          | (Xor  ,VBool a,VBool b) => VBool (a <> b)
-          | (Eq   ,VInt a,VInt b)   => VBool (a = b)
-          | (Eq   ,VBool a,VBool b) => VBool (a = b)
-          | (Lt   ,VInt a,VInt b)   => VBool (a < b)
-          | (Gt   ,VInt a,VInt b)   => VBool (a > b)
-          | _ => raise RunTimeError "mismatch"
-      end
-  | eval r (ITE (c,t,e)) =
-      (case eval r c of
-          VBool true  => eval r t
-        | VBool false => eval r e
-        | _ => raise RunTimeError "cond")
-  | eval r (LetIn (x,e1,e2)) =
-      let val v1 = eval r e1
-      in
-        eval (insert x v1 r) e2
-      end
-  | eval r (Fun (x,_,b)) = VClo (r,x,b)
-  | eval r (App (f,a)) =
-      (case eval r f of
-          VClo (env,param,body) =>
-            let val av = eval r a
-            in
-              eval (insert param av env) body
-            end
-        | _ => raise RunTimeError "nonfun")
+(* Finally, run all tests! *)
+val _ = runAllTests ();
