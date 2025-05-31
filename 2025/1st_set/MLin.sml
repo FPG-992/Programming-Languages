@@ -1,107 +1,199 @@
-datatype bop = Plus | Minus | Mult | Or | And | Xor | Eq | Lt | Gt
-datatype typ = Bool | Int | Arrow of typ * typ
+(* Binary operators *)
+datatype bop = Plus | Minus | Mult
+             | Or | And | Xor
+             | Eq | Lt | Gt
 
+(* Types *)
+datatype typ =
+    Bool                              (* Boolean Type *)
+  | Int                               (* Integer Type *)
+  | Arrow of typ * typ                (* Function Type *)
+
+(* Expressions *)
 datatype expr =
-    IntLit of int | BoolLit of bool
-  | Bop of bop * expr * expr | ITE of expr * expr * expr
-  | LetIn of string * expr * expr | Var of string
-  | Fun of string * typ * expr | App of expr * expr
+    IntLit of int                     (* Integer Literals *)
+  | BoolLit of bool                   (* Boolean Literals *)
+  | Bop of bop * expr * expr          (* Binary Operators *)
+  | ITE of expr * expr * expr         (* If-then-else expressions *)
+  | LetIn of string * expr * expr     (* Let-in expressions *)
+  | Var of string                     (* Variables *)
+  | Fun of string * typ * expr        (* Anonymous Functions *)
+  | App of expr * expr                (* Function Applications *)
 
+(* Environments as association lists *)
 type 'a env = (string * 'a) list
 
+(* Values *)
 datatype value =
-    VInt of int | VBool of bool | VClo of value env * string * expr
+    VInt of int                       (* Integer Values *)
+  | VBool of bool                     (* Boolean Values *)
+  | VClo of value env * string * expr (* Closures *)
 
+(* Exceptions *)
 exception TypeError of string
 exception RunTimeError of string
+exception Unimplemented of string
 
-fun sameType (Int , Int ) = true
-  | sameType (Bool, Bool) = true
-  | sameType (Arrow(a1,b1), Arrow(a2,b2)) =
-      sameType (a1,a2) andalso sameType (b1,b2)
-  | sameType _ = false
+(* Empty environment *)
+fun empty () : 'a env =
+  []
 
-fun lookup _ [] = NONE
-  | lookup x ((y,v)::r) = if x = y then SOME v else lookup x r
-fun insert x v e = (x,v)::e
+(* Look up a variable in the environment *)
+fun lookup (x : string) (e : 'a env) : 'a option =
+  case e of
+    [] => NONE
+  | (name, value) :: rest =>
+      if name = x then SOME value
+      else lookup x rest
 
-fun typeCheck g (IntLit _)  = Int
-  | typeCheck g (BoolLit _) = Bool
-  | typeCheck g (Var x) =
-      (case lookup x g of SOME t => t | NONE => raise TypeError "unbound")
-  | typeCheck g (Bop (op,e1,e2)) =
-      let val t1 = typeCheck g e1
-          val t2 = typeCheck g e2
+(* Insert a new binding (x,v) in the environment *)
+fun insert (x : string) (v : 'a) (e : 'a env) : 'a env =
+  (x, v) :: e
+
+(* Type checker *)
+fun typeCheck (te : typ env) (exp : expr) : typ =
+  case exp of
+    IntLit _ => Int
+  | BoolLit _ => Bool
+  | Var x =>
+      (case lookup x te of
+         SOME t => t
+       | NONE => raise (TypeError ("Unbound variable: " ^ x)))
+  | Bop (bop, e1, e2) =>
+      let
+        val t1 = typeCheck te e1
+        val t2 = typeCheck te e2
       in
-        case op of
-            Plus  => if sameType(t1,Int)  andalso sameType(t2,Int)  then Int
-                     else raise TypeError ""
-          | Minus => if sameType(t1,Int)  andalso sameType(t2,Int)  then Int
-                     else raise TypeError ""
-          | Mult  => if sameType(t1,Int)  andalso sameType(t2,Int)  then Int
-                     else raise TypeError ""
-          | And   => if sameType(t1,Bool) andalso sameType(t2,Bool) then Bool
-                     else raise TypeError ""
-          | Or    => if sameType(t1,Bool) andalso sameType(t2,Bool) then Bool
-                     else raise TypeError ""
-          | Xor   => if sameType(t1,Bool) andalso sameType(t2,Bool) then Bool
-                     else raise TypeError ""
-          | Eq    => if sameType(t1,t2) then Bool else raise TypeError ""
-          | Lt    => if sameType(t1,Int) andalso sameType(t2,Int) then Bool
-                     else raise TypeError ""
-          | Gt    => if sameType(t1,Int) andalso sameType(t2,Int) then Bool
-                     else raise TypeError ""
+        case bop of
+          Plus => (case (t1, t2) of
+                     (Int, Int) => Int
+                   | _ => raise (TypeError "Arithmetic operators expect Int arguments"))
+        | Minus => (case (t1, t2) of
+                      (Int, Int) => Int
+                    | _ => raise (TypeError "Arithmetic operators expect Int arguments"))
+        | Mult => (case (t1, t2) of
+                     (Int, Int) => Int
+                   | _ => raise (TypeError "Arithmetic operators expect Int arguments"))
+        | Or => (case (t1, t2) of
+                   (Bool, Bool) => Bool
+                 | _ => raise (TypeError "Logical operators expect Bool arguments"))
+        | And => (case (t1, t2) of
+                    (Bool, Bool) => Bool
+                  | _ => raise (TypeError "Logical operators expect Bool arguments"))
+        | Xor => (case (t1, t2) of
+                    (Bool, Bool) => Bool
+                  | _ => raise (TypeError "Logical operators expect Bool arguments"))
+        | Eq => (case (t1, t2) of
+                   (Int, Int) => Bool
+                 | (Bool, Bool) => Bool
+                 | _ => raise (TypeError "Comparison operators expect arguments of same type"))
+        | Lt => (case (t1, t2) of
+                   (Int, Int) => Bool
+                 | _ => raise (TypeError "Comparison operators expect Int arguments"))
+        | Gt => (case (t1, t2) of
+                   (Int, Int) => Bool
+                 | _ => raise (TypeError "Comparison operators expect Int arguments"))
       end
-  | typeCheck g (ITE (c,t,e)) =
-      (case typeCheck g c of
+  | ITE (e1, e2, e3) =>
+      let
+        val t1 = typeCheck te e1
+        val t2 = typeCheck te e2
+        val t3 = typeCheck te e3
+      in
+        case t1 of
           Bool =>
-            let val tt = typeCheck g t
-                val te = typeCheck g e
-            in if sameType(tt,te) then tt else raise TypeError "" end
-        | _ => raise TypeError "")
-  | typeCheck g (LetIn (x,e1,e2)) =
-      let val tx = typeCheck g e1
-      in typeCheck (insert x tx g) e2 end
-  | typeCheck g (Fun (x,a,b)) =
-      let val rt = typeCheck (insert x a g) b
-      in Arrow(a,rt) end
-  | typeCheck g (App (f,a)) =
-      (case typeCheck g f of
-          Arrow(pt,rt) =>
-            if sameType(typeCheck g a, pt) then rt
-            else raise TypeError ""
-        | _ => raise TypeError "nonfun")
-
-fun eval r (IntLit n) = VInt n
-  | eval r (BoolLit b) = VBool b
-  | eval r (Var x) =
-      (case lookup x r of SOME v=>v | NONE=>raise RunTimeError "unbound")
-  | eval r (Bop (op,e1,e2)) =
-      let val v1 = eval r e1 val v2 = eval r e2 in
-        case (op,v1,v2) of
-            (Plus ,VInt a,VInt b)   => VInt (a+b)
-          | (Minus,VInt a,VInt b)   => VInt (a-b)
-          | (Mult ,VInt a,VInt b)   => VInt (a*b)
-          | (And  ,VBool a,VBool b) => VBool (a andalso b)
-          | (Or   ,VBool a,VBool b) => VBool (a orelse  b)
-          | (Xor  ,VBool a,VBool b) => VBool (a <> b)
-          | (Eq   ,VInt a,VInt b)   => VBool (a = b)
-          | (Eq   ,VBool a,VBool b) => VBool (a = b)
-          | (Lt   ,VInt a,VInt b)   => VBool (a < b)
-          | (Gt   ,VInt a,VInt b)   => VBool (a > b)
-          | _ => raise RunTimeError "mismatch"
+            if t2 = t3 then t2
+            else raise (TypeError "Branches must have the same type")
+        | _ => raise (TypeError "Condition must be Bool")
       end
-  | eval r (ITE (c,t,e)) =
-      (case eval r c of
-          VBool true  => eval r t
-        | VBool false => eval r e
-        | _ => raise RunTimeError "cond")
-  | eval r (LetIn (x,e1,e2)) =
-      let val v1 = eval r e1
-      in eval (insert x v1 r) e2 end
-  | eval r (Fun (x,_,b)) = VClo(r,x,b)
-  | eval r (App (f,a)) =
-      (case eval r f of
-          VClo(env,p,b) =>
-            let val av = eval r a in eval (insert p av env) b end
-        | _ => raise RunTimeError "nonfun")
+  | LetIn (x, e1, e2) =>
+      let
+        val t1 = typeCheck te e1
+        val te' = insert x t1 te
+      in
+        typeCheck te' e2
+      end
+  | Fun (x, t, e) =>
+      let
+        val te' = insert x t te
+        val t_body = typeCheck te' e
+      in
+        Arrow (t, t_body)
+      end
+  | App (e1, e2) =>
+      let
+        val t1 = typeCheck te e1
+        val t2 = typeCheck te e2
+      in
+        case t1 of
+          Arrow (t_arg, t_ret) =>
+            if t2 = t_arg then t_ret
+            else raise (TypeError "Function argument type mismatch")
+        | _ => raise (TypeError "Application requires a function")
+      end
+
+(* Interpreter *)
+fun eval (ve : value env) (exp : expr) : value =
+  case exp of
+    IntLit n => VInt n
+  | BoolLit b => VBool b
+  | Var x =>
+      (case lookup x ve of
+         SOME v => v
+       | NONE => raise (RunTimeError ("Unbound variable: " ^ x)))
+  | Bop (bop, e1, e2) =>
+      let
+        val v1 = eval ve e1
+        val v2 = eval ve e2
+      in
+        case (v1, v2) of
+          (VInt n1, VInt n2) =>
+            (case bop of
+               Plus => VInt (n1 + n2)
+             | Minus => VInt (n1 - n2)
+             | Mult => VInt (n1 * n2)
+             | Eq => VBool (n1 = n2)
+             | Lt => VBool (n1 < n2)
+             | Gt => VBool (n1 > n2)
+             | _ => raise (RunTimeError "Operand type mismatch"))
+        | (VBool b1, VBool b2) =>
+            (case bop of
+               Or => VBool (b1 orelse b2)
+             | And => VBool (b1 andalso b2)
+             | Xor => VBool (b1 <> b2)
+             | Eq => VBool (b1 = b2)
+             | _ => raise (RunTimeError "Operand type mismatch"))
+        | _ => raise (RunTimeError "Operand type mismatch")
+      end
+  | ITE (e1, e2, e3) =>
+      let
+        val v1 = eval ve e1
+      in
+        case v1 of
+          VBool true => eval ve e2
+        | VBool false => eval ve e3
+        | _ => raise (RunTimeError "Condition must be Bool")
+      end
+  | LetIn (x, e1, e2) =>
+      let
+        val v1 = eval ve e1
+        val ve' = insert x v1 ve
+      in
+        eval ve' e2
+      end
+  | Fun (x, t, e) =>
+      VClo (ve, x, e)
+  | App (e1, e2) =>
+      let
+        val v1 = eval ve e1
+        val v2 = eval ve e2
+      in
+        case v1 of
+          VClo (closure_env, x, body) =>
+            let
+              val new_env = insert x v2 closure_env
+            in
+              eval new_env body
+            end
+        | _ => raise (RunTimeError "Application requires a function")
+      end
