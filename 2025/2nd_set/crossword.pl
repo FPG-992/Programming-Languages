@@ -1,216 +1,126 @@
-/*  ===============================================================
-    crossword.pl   –   ECE-NTUA  PL-1   (June 2025)
-    ===============================================================
-
-      ?- [crossword].
-      ?- crossword('input1.txt').
-
-    ============================================================== */
-
-:- module(crossword, [crossword/1]).
-:- use_module(library(lists)).
-:- use_module(library(dcg/basics)).
 :- use_module(library(readutil)).
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%  1.  Entry
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+:- use_module(library(assoc)).
 
 crossword(File) :-
-    read_instance(File, R, C, Blacks, Words),
-    format('Read: R=~w, C=~w, Blacks=~w~n', [R, C, Blacks]),
-    format('Words: ~w~n', [Words]),
-    build_grid(R, C, Blacks, Grid),
-    format('Built grid:~n'),
-    print_debug_grid(Grid),
-    all_slots(Grid, Slots),
-    length(Slots, NumSlots),
-    format('Found ~w slots~n', [NumSlots]),
-    (   NumSlots > 0 ->
-        format('First few slots: ~w~n', [Slots])
-    ;   true
-    ),
-    (   solve(Slots, Words)                       % search succeeds
-    ->  format('Solution found!~n'),
-        print_grid(Grid)
-    ;   writeln('IMPOSSIBLE')
+    setup_call_cleanup(
+        open(File, read, S),
+        ( read_problem(S, R, C, Blacks, Words),
+          build_grid(R, C, Grid),
+          mark_blacks(Blacks, Grid),
+          slots(Grid, SlotList0),
+          sort_slots(SlotList0, Slots),
+          bucket_by_len(Words, Dict0),
+          once(label_slots(Slots, Dict0)),
+          maplist(print_row, Grid)
+        ),
+        close(S)
     ).
 
-print_debug_grid([]).
-print_debug_grid([Row|Rows]) :-
-    format('Row: ~w~n', [Row]),
-    print_debug_grid(Rows).
+read_problem(S, R, C, Blacks, Words) :-
+    read_line_to_codes(S, L1),
+    phrase(numbers([R,C,B,W]), L1),
+    read_blacks(B, S, Blacks),
+    read_words(W, S, Words).
 
+numbers([N|Ns]) --> blanks, int(N), !, numbers(Ns).
+numbers([]) --> [].
+int(N) --> digits(Ds), { number_codes(N, Ds) }.
+digits([D|Ds]) --> digit(D), !, digits(Ds).
+digits([]) --> [].
+digit(D) --> [D], { between(0'0,0'9,D) }.
+blanks --> [C], { char_type(C, space) }, !, blanks.
+blanks --> [].
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%  2.  Read tokens - FIXED
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+read_blacks(0, _, []) :- !.
+read_blacks(N, S, [(R,C)|Bs]) :-
+    N > 0,
+    read_line_to_codes(S, L),
+    L \== end_of_file,
+    phrase(numbers([R,C]), L),
+    N1 is N-1,
+    read_blacks(N1, S, Bs).
 
-read_instance(File, R, C, Blacks, Words) :-
-    read_file_to_codes(File, Cs, []),
-    phrase(tokens(Ts), Cs),
-    Ts = [R,C,NB,NW|Tail],
-    take_pairs(NB, Tail, Blacks, AfterPairs),
-    take_atoms(NW, AfterPairs, Words, []).
+read_words(0, _, []) :- !.
+read_words(N, S, [W|Ws]) :-
+    N > 0,
+    read_line_to_codes(S, Codes0),
+    Codes0 \== end_of_file,
+    exclude(=(13), Codes0, Codes),
+    Codes \== [],
+    string_codes(Str, Codes),
+    atom_string(W, Str),
+    N1 is N-1,
+    read_words(N1, S, Ws).
 
-tokens([T|Ts])     --> blanks, token(T), !, tokens(Ts).
-tokens([])         --> blanks, eos.
-token(N)           --> integer(N).
-token(A)           --> string_without(" \n\t\r", Cs),
-                       {Cs\=[], atom_codes(A,Cs)}.
+build_grid(R,C,G) :- length(G,R), maplist(make_row(C), G).
+make_row(C, Row) :- length(Row,C).
 
-take_pairs(0,L,[],L) :- !.
-take_pairs(N,[R,C|T],[(R,C)|Ps],Rest) :-
-    N>0, N1 is N-1, take_pairs(N1,T,Ps,Rest).
+mark_blacks([], _).
+mark_blacks([(R,C)|Bs], G) :- nth1(R,G,Row), nth1(C,Row,#), mark_blacks(Bs,G).
 
-take_atoms(0,L,[],L) :- !.
-take_atoms(N,[W|T],[W|Ws],Rest) :-
-    N>0, N1 is N-1, take_atoms(N1,T,Ws,Rest).
+slots(G, Slots) :-
+    across_slots(G, AS),
+    transpose(G, GT),
+    across_slots(GT, DS),
+    append(AS, DS, Slots).
 
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%  3.  Grid & slot enumeration
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-build_grid(Rows, Cols, Blacks, Grid) :-
-    length(Grid, Rows),
-    maplist(length_list(Cols), Grid),
-    maplist(mark_black(Grid), Blacks).
-
-length_list(N, L) :- length(L, N).
-mark_black(G, (R,C)) :- nth1(R,G,Row), nth1(C,Row,'#').
-
-all_slots(Grid, Slots) :-
-    h_slots(Grid,  H),
-    transpose(Grid, T),
-    h_slots(T, V),
-    append(H, V, Slots).
-
-h_slots([], []).
-h_slots([Row|Rs], Slots) :-
+across_slots([], []).
+across_slots([Row|Rs], Slots) :-
     row_slots(Row, RowSlots),
-    format('Row ~w produced slots: ~w~n', [Row, RowSlots]),
-    h_slots(Rs, Rest),
+    across_slots(Rs, Rest),
     append(RowSlots, Rest, Slots).
 
 row_slots(Row, Slots) :-
-    row_scan(Row, [], [], Rev), reverse(Rev, Slots).
+    append(_,Tail,Row),
+    Tail \== [],
+    Tail = [H|_],
+    H \== #,
+    !,
+    prefix_unhash(Tail, Slot, After),
+    (   length(Slot,L), L>=2 -> Slots=[Slot|S1] ; Slots=S1 ),
+    row_slots(After, S1).
+row_slots(_, []).
 
-row_scan([], Curr, Acc, Out) :-          % flush tail
-    ( length(Curr,L), L>=2 -> reverse(Curr,S), Out=[S|Acc]
-    ; Out=Acc ).
-row_scan([Cell|Rest], Curr, Acc, Out) :-
-    ( Cell == '#' ->
-        % Hit black square - finish current sequence
-        ( length(Curr,L), L>=2 -> reverse(Curr,S), Acc1=[S|Acc]
-        ; Acc1=Acc ),
-        row_scan(Rest, [], Acc1, Out)
-    ;   % Regular cell - add to current sequence
-        row_scan(Rest, [Cell|Curr], Acc, Out)
-    ).
+prefix_unhash([C|T],[C|S],Rest) :- C \== #, !, prefix_unhash(T,S,Rest).
+prefix_unhash(Rest, [], Rest).
 
 transpose([], []).
-transpose([F|Fs], Ts) :- transpose(F, [F|Fs], Ts).
-transpose([], _, []).
-transpose([_|Rs], Ms, [Ts|Tss]) :-
-    firsts_rests(Ms, Ts, Ms1),
-    transpose(Rs, Ms1, Tss).
-firsts_rests([], [], []).
-firsts_rests([[F|Os]|Rest], [F|Fs], [Os|Oss]) :-
-    firsts_rests(Rest, Fs, Oss).
+transpose([F|Fs], Ts) :- transpose_col(F,[F|Fs],Ts).
+transpose_col([],_,[]).
+transpose_col([_|_],Rows,[Col|Cols]) :- maplist(list_first_rest,Rows,Col,Tails), transpose(Tails,Cols).
+list_first_rest([H|T],H,T).
 
+sort_slots(Slots, Ordered) :-
+    map_list_to_pairs(length, Slots, Pairs),
+    keysort(Pairs, Rev),
+    reverse(Rev, BigFirst),
+    pairs_values(BigFirst, Ordered).
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%  4.  Search  (fail-first, no zero-candidate slots) - FIXED
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+bucket_by_len(Ws, Dict) :- empty_assoc(E), foldl(add_word, Ws, E, Dict).
+add_word(W, In, Out) :-
+    atom_length(W,L),
+    ( get_assoc(L,In,Ls) -> put_assoc(L,In,[W|Ls],Out)
+    ; put_assoc(L,In,[W],Out) ).
 
-solve([], []).                                   % done
-solve(Slots, Words) :-
-    select_best(Slots, Words, Slot, Cands),
-    Cands \= [],                                 % ensure we have candidates
-    member(Word, Cands),
-    atom_chars(Word, Chars),
-    Slot = Chars,                                % propagate letters
-    select(Word, Words, Words1),
-    delete(Slots, Slot, Slots1),
-    solve(Slots1, Words1).
+label_slots([], _).
+label_slots([S|Ss], Dict0) :-
+    length(S,L),
+    get_assoc(L, Dict0, Bucket),
+    select(W, Bucket, Rest),
+    atom_chars(W, Chars),
+    S = Chars,
+    put_assoc(L, Dict0, Rest, Dict),
+    label_slots(Ss, Dict).
 
-select_best(Slots, Words, Best, Cands) :-
-    % keep only slots that still have at least one word
-    include(slot_has_candidate(Words), Slots, Viable),
-    Viable \= [],                                % fail if none
-    maplist(slot_cand_pair(Words), Viable, Pairs),
-    keysort(Pairs, [_-Best|_]),                  % fewest first
-    findall(W, fits(Best, W, Words), Cands).
+print_row(Row) :-
+    split_on_hash(Row, Segs),
+    include(len_ge2, Segs, Good),
+    maplist(atom_chars, Words, Good),
+    atomic_list_concat(Words, ' ', Line),
+    writeln(Line).
 
-slot_has_candidate(Ws, Slot) :-
-    findall(W, fits(Slot, W, Ws), Cands),
-    Cands \= [].
+split_on_hash([], [[]]).
+split_on_hash([#|T],[[]|Segs]) :- split_on_hash(T,Segs).
+split_on_hash([C|T],[[C|Cs]|Segs]) :- C \== #, split_on_hash(T,[Cs|Segs]).
 
-slot_cand_pair(Words, Slot, N-Slot) :-
-    findall(W, fits(Slot, W, Words), Cands),
-    length(Cands, N).
-
-% Check if a word fits in a slot
-fits(Slot, Word, Words) :-
-    member(Word, Words),
-    atom_chars(Word, Chars),
-    length(Slot, L1),
-    length(Chars, L2),
-    L1 =:= L2,
-    fits_chars(Slot, Chars).
-
-fits_chars([], []).
-fits_chars([S|Ss], [C|Cs]) :-
-    (var(S) -> true ; S = C),
-    fits_chars(Ss, Cs).
-
-atom_len(L, W) :- atom_length(W, L).
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%  5.  Printing - SIMPLIFIED
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-print_grid([]).
-print_grid([Row|Rs]) :-
-    extract_horizontal_words(Row, Words),
-    print_words_line(Words),
-    print_grid(Rs).
-
-% Extract words from a single row
-extract_horizontal_words(Row, Words) :-
-    extract_word_sequences(Row, [], [], RevWords),
-    reverse(RevWords, Words).
-
-extract_word_sequences([], Current, Acc, Result) :-
-    finish_current_word(Current, Acc, Result).
-
-extract_word_sequences(['#'|Rest], Current, Acc, Result) :- !,
-    finish_current_word(Current, Acc, NewAcc),
-    extract_word_sequences(Rest, [], NewAcc, Result).
-
-extract_word_sequences([Char|Rest], Current, Acc, Result) :-
-    Char \= '#',
-    extract_word_sequences(Rest, [Char|Current], Acc, Result).
-
-finish_current_word(Current, Acc, Result) :-
-    (   Current = [] 
-    ->  Result = Acc
-    ;   length(Current, Len),
-        (   Len >= 2
-        ->  reverse(Current, WordChars),
-            atom_chars(WordAtom, WordChars),
-            Result = [WordAtom|Acc]
-        ;   Result = Acc
-        )
-    ).
-
-% Print words in a line
-print_words_line([]) :- nl.
-print_words_line([Word]) :- !,
-    write(Word), nl.
-print_words_line([Word|Words]) :-
-    write(Word), write(' '),
-    print_words_line(Words).
+len_ge2(L) :- length(L,N), N>=2.
