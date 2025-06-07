@@ -1,0 +1,10 @@
+4 4 3 6
+2 1
+2 3
+4 3
+AMAN
+ANNA
+HN
+HNIA
+GATA
+NA
